@@ -3,263 +3,207 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Christmas Magic Tree - Mobile</title>
+    <title>Magic Christmas 2024</title>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #000;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
-        
-        /* 启动遮罩层 - 适配手机点击授权 */
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         #overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-            color: #FFD700;
-            text-align: center;
-            padding: 20px;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100; color: #FFD700; transition: opacity 0.5s;
         }
         #start-btn {
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            background: transparent;
-            border: 2px solid #FFD700;
-            color: #FFD700;
-            border-radius: 30px;
-            cursor: pointer;
-            margin-top: 20px;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+            padding: 15px 40px; font-size: 1.2rem; background: rgba(255,215,0,0.1);
+            border: 2px solid #FFD700; color: #FFD700; border-radius: 30px;
+            cursor: pointer; box-shadow: 0 0 20px rgba(255,215,0,0.3);
         }
-
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
-        
-        /* 视频流处理：静默播放，防止 iOS 弹窗 */
-        #video-input {
-            position: absolute;
-            width: 1px; height: 1px;
-            opacity: 0;
-            pointer-events: none;
-        }
-
         #status-pill {
-            position: absolute;
-            top: env(safe-area-inset-top, 20px); /* 适配刘海屏 */
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 6px 12px;
-            background: rgba(0, 0, 0, 0.6);
-            border-radius: 20px;
-            color: #FFD700;
-            font-size: 12px;
-            z-index: 10;
-            white-space: nowrap;
+            position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+            padding: 8px 16px; background: rgba(0,0,0,0.5); border-radius: 20px;
+            color: #FFD700; font-size: 13px; z-index: 10; backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,215,0,0.2);
         }
-
         #christmas-text {
-            position: absolute;
-            top: 30%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0.5);
-            font-size: 2.5rem;
-            font-weight: 900;
-            color: #FFD700;
-            text-shadow: 0 0 20px #FFD700;
-            z-index: 5;
-            opacity: 0;
-            transition: all 0.4s ease-out;
-            pointer-events: none;
-            width: 100%;
-            text-align: center;
+            position: absolute; top: 25%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 3rem; font-weight: 900; color: #FFD700; z-index: 5;
+            text-shadow: 0 0 30px #FFD700; opacity: 0; pointer-events: none;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
+        #video-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/@mediapipe/hands/hands.js"></script>
 </head>
 <body>
 
     <div id="overlay">
-        <h2>Christmas Magic</h2>
-        <p>需要摄像头权限以开启手势魔法</p>
+        <h1 style="font-size: 2rem; margin-bottom: 10px;">圣诞手势魔法</h1>
+        <p style="opacity: 0.8; margin-bottom: 30px;">张开手掌，点亮奇迹</p>
         <button id="start-btn">开启魔法</button>
     </div>
 
-    <div id="status-pill">等待初始化...</div>
-    <h1 id="christmas-text">MERRY CHRISTMAS</h1>
+    <div id="status-pill">📡 正在连接魔法源...</div>
+    <h1 id="christmas-text">MERRY<br>CHRISTMAS</h1>
     <video id="video-input" playsinline webkit-playsinline></video>
     <div id="canvas-container"></div>
 
 <script>
+    // --- 全局配置 ---
     const CONFIG = {
-        particleCount: window.innerWidth < 600 ? 3000 : 6000, // 手机减少粒子数保帧率
-        treeLevels: 9,
-        boxSize: 0.6
+        pCount: window.innerWidth < 600 ? 4000 : 8000,
+        treeColor: 0x006400,
+        starColor: 0xffd700
     };
 
-    let scene, camera, renderer, giftTreeGroup, starMesh, starGlow, particleSystem;
-    let openness = 0, currentOpenness = 0;
+    let scene, camera, renderer, giftTree, star, particles, clock = new THREE.Clock();
+    let openness = 0, curOpen = 0;
 
-    // 适配手机点击启动
-    document.getElementById('start-btn').addEventListener('click', function() {
-        document.getElementById('overlay').style.display = 'none';
-        initThreeJS();
-        startCameraApp();
+    document.getElementById('start-btn').onclick = function() {
+        document.getElementById('overlay').style.opacity = '0';
+        setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
+        init();
+        startAI();
         animate();
-    });
+    };
 
-    function initThreeJS() {
+    function init() {
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x000000);
-        
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 5, 20); // 手机端视角稍远一点
-        camera.lookAt(0, 2, 0);
+        scene.fog = new THREE.FogExp2(0x000000, 0.03);
+
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 6, 22);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        document.body.appendChild(renderer.domElement);
 
-        const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-        scene.add(ambient);
-        const dirLight = new THREE.DirectionalLight(0xffd700, 1);
-        dirLight.position.set(5, 15, 5);
-        scene.add(dirLight);
+        // 灯光
+        const amb = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(amb);
+        const point = new THREE.PointLight(0xffd700, 2, 50);
+        point.position.set(0, 10, 5);
+        scene.add(point);
 
-        createGiftTree();
+        createTree();
         createParticles();
-
-        window.addEventListener('resize', onWindowResize);
     }
 
-    function createGiftTree() {
-        giftTreeGroup = new THREE.Group();
-        const colors = [0xB22222, 0x006400, 0xFFFFFF, 0xDAA520];
-        const materials = colors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
+    function createTree() {
+        giftTree = new THREE.Group();
+        const colors = [0xff0000, 0x00ff00, 0xffffff, 0xffd700];
         const geom = new THREE.BoxGeometry(1, 1, 1);
-
-        let y = 0;
-        for(let i=0; i<CONFIG.treeLevels; i++) {
-            const p = i/CONFIG.treeLevels;
-            const r = 3.5 * (1-p) + 0.1;
-            const s = CONFIG.boxSize * (1 - p*0.3);
-            const count = Math.max(1, Math.floor((2*Math.PI*r)/(s*1.4)));
-            
+        
+        for(let i=0; i<12; i++) {
+            const h = i * 0.9;
+            const rad = 5 * (1 - i/12) + 0.2;
+            const count = Math.floor(rad * 4) + 2;
             for(let j=0; j<count; j++) {
-                const ang = (j/count)*Math.PI*2 + i*0.5;
-                const box = new THREE.Mesh(geom, materials[Math.floor(Math.random()*materials.length)]);
-                box.position.set(Math.cos(ang)*r, y, Math.sin(ang)*r);
+                const ang = (j/count) * Math.PI * 2 + i;
+                const mat = new THREE.MeshStandardMaterial({ 
+                    color: colors[Math.floor(Math.random()*colors.length)],
+                    roughness: 0.3, metalness: 0.5
+                });
+                const box = new THREE.Mesh(geom, mat);
+                box.position.set(Math.cos(ang)*rad, h, Math.sin(ang)*rad);
                 box.rotation.set(Math.random(), ang, 0);
-                box.scale.setScalar(s);
-                giftTreeGroup.add(box);
+                box.scale.setScalar(0.6 * (1-i/15));
+                giftTree.add(box);
             }
-            y += s * 0.9;
         }
 
-        // 星星
-        const starGeo = new THREE.OctahedronGeometry(0.7, 0);
-        starMesh = new THREE.Mesh(starGeo, new THREE.MeshBasicMaterial({ color: 0xFFFF00 }));
-        starMesh.position.y = y;
-        giftTreeGroup.add(starMesh);
+        // 炫酷流光星
+        const sGeo = new THREE.OctahedronGeometry(1, 0);
+        const sMat = new THREE.MeshBasicMaterial({ color: 0xfff000 });
+        star = new THREE.Mesh(sGeo, sMat);
+        star.position.y = 11;
         
-        giftTreeGroup.position.y = -y/2;
-        scene.add(giftTreeGroup);
+        const glow = new THREE.PointLight(0xffd700, 5, 20);
+        star.add(glow);
+        giftTree.add(star);
+
+        giftTree.position.y = -5;
+        scene.add(giftTree);
     }
 
     function createParticles() {
-        const geom = new THREE.BufferGeometry();
-        const pos = [];
-        const vels = [];
-        for(let i=0; i<CONFIG.particleCount; i++) {
-            pos.push((Math.random()-0.5)*100, (Math.random()-0.5)*60, (Math.random()-0.5)*60);
-            vels.push(Math.random());
+        const geo = new THREE.BufferGeometry();
+        const pos = [], vels = [];
+        for(let i=0; i<CONFIG.pCount; i++) {
+            pos.push((Math.random()-0.5)*80, Math.random()*40, (Math.random()-0.5)*80);
+            vels.push(Math.random() * 0.2 + 0.05);
         }
-        geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-        geom.setAttribute('velocity', new THREE.Float32BufferAttribute(vels, 1));
-        const mat = new THREE.PointsMaterial({ color: 0xFFD700, size: 0.3, transparent: true, opacity: 0.6 });
-        particleSystem = new THREE.Points(geom, mat);
-        scene.add(particleSystem);
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setAttribute('velocity', new THREE.Float32BufferAttribute(vels, 1));
+        const mat = new THREE.PointsMaterial({ color: 0xffd700, size: 0.2, transparent: true, blending: THREE.AdditiveBlending });
+        particles = new THREE.Points(geo, mat);
+        scene.add(particles);
     }
 
-    async function startCameraApp() {
-        const videoElement = document.getElementById('video-input');
-        const statusPill = document.getElementById('status-pill');
-
-        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({
-            maxNumHands: 1,
-            modelComplexity: 0, // 手机端设为0以提高性能
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
+    async function startAI() {
+        const status = document.getElementById('status-pill');
+        const hands = new Hands({
+            locateFile: (file) => `https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/@mediapipe/hands/${file}`
         });
 
-        hands.onResults((results) => {
-            if(results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const lm = results.multiHandLandmarks[0];
-                const dist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
-                openness = Math.max(0, Math.min(1, (dist - 0.05) * 5));
-                statusPill.innerText = "✨ 魔法感应中";
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5 });
+        hands.onResults(res => {
+            if(res.multiHandLandmarks.length > 0) {
+                status.innerText = "🌟 魔法生效中";
+                const lm = res.multiHandLandmarks[0];
+                const d = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
+                openness = Math.min(1, d * 4);
             } else {
+                status.innerText = "👋 请张开手掌";
                 openness = 0;
-                statusPill.innerText = "请对着前置镜头张开手掌";
             }
         });
 
-        // 适配手机：强制使用前置摄像头 (facingMode: 'user')
-        const cameraObj = new Camera(videoElement, {
-            onFrame: async () => { await hands.send({image: videoElement}); },
-            width: 480, height: 640,
-            facingMode: 'user' 
+        const cam = new Camera(document.getElementById('video-input'), {
+            onFrame: async () => await hands.send({image: document.getElementById('video-input')}),
+            width: 480, height: 640, facingMode: 'user'
         });
-
+        
         try {
-            await cameraObj.start();
-        } catch (err) {
-            statusPill.innerText = "无法打开摄像头，请检查权限";
-            console.error(err);
+            await cam.start();
+            status.innerText = "✨ 正在唤醒星光...";
+        } catch(e) {
+            status.innerText = "❌ 摄像头启动失败";
         }
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        currentOpenness += (openness - currentOpenness) * 0.1;
-        const time = Date.now() * 0.001;
+        const dt = clock.getElapsedTime();
+        curOpen += (openness - curOpen) * 0.1;
 
-        if(giftTreeGroup) {
-            giftTreeGroup.rotation.y = time * 0.3 + currentOpenness * 2;
-            const s = 1 + currentOpenness * 0.2;
-            giftTreeGroup.scale.set(s,s,s);
+        // 树与星旋转
+        if(giftTree) {
+            giftTree.rotation.y = dt * 0.2 + curOpen * 1.5;
+            const s = 1 + curOpen * 0.2;
+            giftTree.scale.set(s,s,s);
+            star.rotation.y -= 0.1;
+            star.scale.setScalar(1 + Math.sin(dt*5)*0.2 + curOpen*0.5);
         }
 
-        if(particleSystem) {
-            const pos = particleSystem.geometry.attributes.position.array;
-            const vels = particleSystem.geometry.attributes.velocity.array;
-            for(let i=0; i<pos.length; i+=3) {
-                pos[i+1] += (currentOpenness > 0.1) ? vels[i/3]*0.4 : -0.05;
-                if(pos[i+1] < -30) pos[i+1] = 30;
-                if(pos[i+1] > 30) pos[i+1] = -30;
-            }
-            particleSystem.geometry.attributes.position.needsUpdate = true;
+        // 螺旋粒子流
+        const pPos = particles.geometry.attributes.position.array;
+        const pVel = particles.geometry.attributes.velocity.array;
+        for(let i=0; i<pPos.length; i+=3) {
+            const idx = i/3;
+            pPos[i+1] += pVel[idx] * (1 + curOpen * 5); // 随手势加速升天
+            if(pPos[i+1] > 30) pPos[i+1] = -10;
+            pPos[i] += Math.sin(dt + idx) * 0.05;
         }
+        particles.geometry.attributes.position.needsUpdate = true;
 
-        const text = document.getElementById('christmas-text');
-        text.style.opacity = currentOpenness > 0.7 ? 1 : 0;
-        text.style.transform = `translate(-50%, -50%) scale(${0.5 + currentOpenness * 0.5})`;
+        // 文字互动
+        const txt = document.getElementById('christmas-text');
+        txt.style.opacity = curOpen > 0.6 ? (curOpen - 0.6) * 2.5 : 0;
+        txt.style.transform = `translate(-50%, -50%) scale(${0.5 + curOpen * 0.8})`;
 
         renderer.render(scene, camera);
-    }
-
-    function onWindowResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
     }
 </script>
 </body>
