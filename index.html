@@ -32,8 +32,11 @@
         #video-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/@mediapipe/hands/hands.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -63,7 +66,7 @@
         document.getElementById('overlay').style.opacity = '0';
         setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
         init();
-        startAI();
+        startAI(); // 这里将调用修复后的函数
         animate();
     };
 
@@ -143,11 +146,15 @@
 
     async function startAI() {
         const status = document.getElementById('status-pill');
+        
+        // 【修复点2】 确保 locateFile 使用与 script 标签一致的源
         const hands = new Hands({
-            locateFile: (file) => `https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/@mediapipe/hands/${file}`
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
         });
 
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5 });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
         hands.onResults(res => {
             if(res.multiHandLandmarks.length > 0) {
                 status.innerText = "🌟 魔法生效中";
@@ -160,6 +167,7 @@
             }
         });
 
+        // Camera 类也依赖于正确的脚本加载，这里使用 JS 全局变量
         const cam = new Camera(document.getElementById('video-input'), {
             onFrame: async () => await hands.send({image: document.getElementById('video-input')}),
             width: 480, height: 640, facingMode: 'user'
@@ -169,6 +177,7 @@
             await cam.start();
             status.innerText = "✨ 正在唤醒星光...";
         } catch(e) {
+            console.error(e);
             status.innerText = "❌ 摄像头启动失败";
         }
     }
