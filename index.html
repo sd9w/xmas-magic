@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Magic Christmas 2024 (Lite)</title>
+    <title>Magic Christmas Photo</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; touch-action: none; }
         #overlay {
@@ -19,18 +19,17 @@
             -webkit-tap-highlight-color: transparent;
         }
         #status-pill {
-            position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
-            padding: 8px 16px; background: rgba(0,0,0,0.5); border-radius: 20px;
-            color: #FFD700; font-size: 13px; z-index: 10; backdrop-filter: blur(5px);
-            border: 1px solid rgba(255,215,0,0.2);
+            position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+            padding: 6px 14px; background: rgba(0,0,0,0.6); border-radius: 20px;
+            color: #FFD700; font-size: 12px; z-index: 10; backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,215,0,0.3);
             white-space: nowrap;
         }
-        #christmas-text {
-            position: absolute; top: 25%; left: 50%; transform: translate(-50%, -50%);
-            font-size: 3rem; font-weight: 900; color: #FFD700; z-index: 5;
-            text-shadow: 0 0 30px #FFD700; opacity: 0; pointer-events: none;
-            transition: opacity 0.3s;
-            text-align: center;
+        #title-text {
+            position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 2.5rem; font-weight: 900; color: #FFD700; z-index: 5;
+            text-shadow: 0 0 20px #FFD700; opacity: 0; pointer-events: none;
+            transition: opacity 0.5s; text-align: center; letter-spacing: 2px;
         }
         #video-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     </style>
@@ -43,39 +42,34 @@
 <body>
 
     <div id="overlay">
-        <h1 style="font-size: 2rem; margin-bottom: 10px;">圣诞手势魔法</h1>
-        <p style="opacity: 0.8; margin-bottom: 30px;">性能优化版</p>
-        <button id="start-btn">开启魔法</button>
+        <h1 style="font-size: 1.8rem; margin-bottom: 10px; color:#FFD700">圣诞记忆魔法</h1>
+        <p style="opacity: 0.8; margin-bottom: 30px; font-size: 0.9rem;">张开手掌，释放星光</p>
+        <button id="start-btn">开启魔法相框</button>
     </div>
 
-    <div id="status-pill">📡 准备就绪</div>
-    <h1 id="christmas-text">MERRY<br>CHRISTMAS</h1>
+    <div id="status-pill">📸 准备相机中...</div>
+    <div id="title-text">MERRY<br>CHRISTMAS</div>
     <video id="video-input" playsinline webkit-playsinline></video>
-    <div id="canvas-container"></div>
 
 <script>
-    // --- 针对手机的性能配置 ---
+    // --- 手机性能配置 ---
     const isMobile = window.innerWidth < 768;
     const CONFIG = {
-        // 手机上大幅减少粒子数，防止崩溃
-        pCount: isMobile ? 1200 : 5000, 
-        videoW: isMobile ? 360 : 640,
-        videoH: isMobile ? 270 : 480
+        pCount: isMobile ? 1500 : 4000, // 粒子数量
+        starColor: 0xffd700,
+        frameColor: 0xffaa00
     };
 
-    let scene, camera, renderer, giftTree, star, particles, clock = new THREE.Clock();
+    let scene, camera, renderer, photoGroup, particles;
+    let clock = new THREE.Clock();
     let openness = 0, curOpen = 0;
-    let cameraInstance = null;
 
     document.getElementById('start-btn').onclick = function() {
         const btn = this;
-        btn.innerText = "加载中...";
-        btn.disabled = true;
-
+        btn.innerText = "启动中...";
         setTimeout(() => {
             document.getElementById('overlay').style.opacity = '0';
             setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
-            
             initThree();
             startAI(); 
             animate();
@@ -84,188 +78,205 @@
 
     function initThree() {
         scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.04);
+        // 黑色背景，带一点点雾气增加深邃感
+        scene.fog = new THREE.FogExp2(0x000000, 0.05);
 
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 500);
-        camera.position.set(0, 6, 22);
+        camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.z = 18;
 
-        renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: "high-performance" });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 限制DPR
+        renderer = new THREE.WebGLRenderer({ antialias: !isMobile, alpha: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 简化灯光
-        const amb = new THREE.AmbientLight(0xffffff, 0.6);
+        const amb = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(amb);
-        
-        // 只有非移动端才开点光源阴影计算
-        const point = new THREE.PointLight(0xffd700, 1.5, 40);
-        point.position.set(0, 10, 5);
+        const point = new THREE.PointLight(0xffd700, 2, 50);
+        point.position.set(0, 5, 10);
         scene.add(point);
 
-        createTree();
+        createPhotoFrame();
         createParticles();
     }
 
-    function createTree() {
-        giftTree = new THREE.Group();
-        // 减少材质切换开销
-        const geom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
-        const mat = new THREE.MeshStandardMaterial({ 
-            color: 0x228b22, 
-            roughness: 0.4, 
-            metalness: 0.1 
+    // --- 创建中央相框 ---
+    function createPhotoFrame() {
+        photoGroup = new THREE.Group();
+
+        // 1. 金色边框
+        const frameGeo = new THREE.BoxGeometry(7.2, 7.2, 0.5);
+        const frameMat = new THREE.MeshStandardMaterial({ 
+            color: CONFIG.frameColor, roughness: 0.2, metalness: 0.8 
         });
-        
-        // 减少盒子数量
-        const levels = isMobile ? 8 : 12;
-        
-        for(let i=0; i<levels; i++) {
-            const h = i * 0.9;
-            const rad = 5 * (1 - i/levels) + 0.2;
-            const count = Math.floor(rad * 3.5) + 2; 
-            for(let j=0; j<count; j++) {
-                const ang = (j/count) * Math.PI * 2 + i;
-                const box = new THREE.Mesh(geom, mat);
-                
-                // 随机颜色优化
-                if(Math.random() > 0.7) {
-                    box.material = mat.clone();
-                    box.material.color.setHex(Math.random() > 0.5 ? 0xff0000 : 0xffd700);
-                }
-                
-                box.position.set(Math.cos(ang)*rad, h, Math.sin(ang)*rad);
-                box.rotation.set(Math.random(), ang, 0);
-                box.scale.setScalar(0.6 * (1-i/15));
-                giftTree.add(box);
-            }
-        }
+        const frame = new THREE.Mesh(frameGeo, frameMat);
+        photoGroup.add(frame);
 
-        const sGeo = new THREE.OctahedronGeometry(1, 0);
-        const sMat = new THREE.MeshBasicMaterial({ color: 0xfff000 });
-        star = new THREE.Mesh(sGeo, sMat);
-        star.position.y = levels * 0.9 + 0.5;
-        giftTree.add(star);
+        // 2. 照片区域 (这里用颜色代替，你可以替换 map: texture)
+        // 如果你有照片链接，可以取消注释下面两行，并填入 url
+        // const loader = new THREE.TextureLoader();
+        // const photoTexture = loader.load('你的照片链接.jpg'); 
+        
+        const photoGeo = new THREE.PlaneGeometry(6.5, 6.5);
+        const photoMat = new THREE.MeshBasicMaterial({ 
+            color: 0xffffff, // 默认白色底
+            // map: photoTexture // 如果有照片，启用这行
+        });
 
-        giftTree.position.y = -5;
-        scene.add(giftTree);
+        // 简单的“猫咪”占位符 (用 Canvas 动态画一个)
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(0,0,256,256);
+        ctx.fillStyle = '#ff5555'; ctx.font = '40px Arial'; 
+        ctx.textAlign = 'center'; ctx.fillText('Your Photo', 128, 120);
+        ctx.fillText('Here', 128, 160);
+        const defTex = new THREE.CanvasTexture(canvas);
+        photoMat.map = defTex;
+
+        const photo = new THREE.Mesh(photoGeo, photoMat);
+        photo.position.z = 0.3; // 稍微凸出一点
+        photoGroup.add(photo);
+
+        scene.add(photoGroup);
     }
 
+    // --- 创建粒子星尘 ---
     function createParticles() {
         const geo = new THREE.BufferGeometry();
-        const pos = [], vels = [];
-        for(let i=0; i<CONFIG.pCount; i++) {
-            pos.push((Math.random()-0.5)*60, Math.random()*40, (Math.random()-0.5)*60);
-            vels.push(Math.random() * 0.1 + 0.05); // 降低速度
-        }
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-        geo.setAttribute('velocity', new THREE.Float32BufferAttribute(vels, 1));
+        const pos = [], vels = [], sizes = [];
         
-        // 使用更简单的材质
+        for(let i=0; i<CONFIG.pCount; i++) {
+            // 初始让粒子围成一个圈
+            const r = 4 + Math.random() * 5;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = (Math.random() - 0.5) * Math.PI;
+            
+            pos.push(r * Math.cos(theta) * Math.cos(phi), 
+                     r * Math.sin(phi), 
+                     r * Math.sin(theta) * Math.cos(phi));
+            
+            // 速度向量 (向外爆炸的方向)
+            vels.push((Math.random()-0.5), (Math.random()-0.5), (Math.random()-0.5));
+            sizes.push(Math.random());
+        }
+        
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setAttribute('velocity', new THREE.Float32BufferAttribute(vels, 3));
+        geo.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+
+        // 粒子材质
         const mat = new THREE.PointsMaterial({ 
-            color: 0xffd700, 
-            size: isMobile ? 0.3 : 0.2, // 手机上粒子少但大一点
+            color: CONFIG.starColor, 
+            size: 0.4, 
             transparent: true, 
             opacity: 0.8,
             blending: THREE.AdditiveBlending 
         });
+        
         particles = new THREE.Points(geo, mat);
         scene.add(particles);
     }
 
     async function startAI() {
         const status = document.getElementById('status-pill');
-        
         try {
             const hands = new Hands({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
             });
-
-            // 【关键优化】使用 Lite 模型 (modelComplexity: 0) 
-            hands.setOptions({ 
-                maxNumHands: 1, 
-                modelComplexity: 0, 
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-
+            
+            // 保持 Lite 模型以防手机卡死
+            hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5 });
+            
             hands.onResults(res => {
                 if(res.multiHandLandmarks.length > 0) {
-                    status.innerText = "🌟 魔法生效中";
+                    status.innerText = "✨ 手势识别成功";
                     const lm = res.multiHandLandmarks[0];
-                    // 简化距离计算，只取 Y 轴差异大概估算，减少开销
+                    // 计算食指和大拇指指尖距离，或者手掌展开程度
                     const d = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
-                    openness = Math.min(1, d * 5);
+                    // 放大系数，让互动更灵敏
+                    openness = Math.min(1, d * 6); 
                 } else {
-                    status.innerText = "👋 请张开手掌";
-                    openness = 0;
+                    status.innerText = "👋 请在摄像头前张开手";
+                    openness = 0; // 没手时归零
                 }
             });
 
-            const videoElement = document.getElementById('video-input');
-            cameraInstance = new Camera(videoElement, {
-                onFrame: async () => {
-                    await hands.send({image: videoElement});
-                },
-                width: CONFIG.videoW, // 降低分辨率
-                height: CONFIG.videoH,
+            const vid = document.getElementById('video-input');
+            const cam = new Camera(vid, {
+                onFrame: async () => await hands.send({image: vid}),
+                width: isMobile ? 360 : 640, height: isMobile ? 270 : 480,
                 facingMode: 'user'
             });
-
-            status.innerText = "✨ 正在唤醒星光...";
-            await cameraInstance.start();
+            await cam.start();
+            status.innerText = "🌟 魔法已就绪";
             
         } catch(e) {
             console.error(e);
-            status.innerText = "⚠️ 无法开启摄像头，请在Safari/Chrome中重试";
-            // 即使摄像头失败，也让动画跑起来（自动演示模式）
-            setInterval(() => {
-                openness = (Math.sin(Date.now()/1000)+1)/2;
-            }, 3000);
+            status.innerText = "⚠️ 摄像头权限未开启";
         }
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        
         const dt = clock.getElapsedTime();
-        // 缓动
-        curOpen += (openness - curOpen) * 0.1;
+        curOpen += (openness - curOpen) * 0.1; // 缓动插值
 
-        if(giftTree) {
-            giftTree.rotation.y = dt * 0.2 + curOpen * 1.5;
-            const s = 1 + curOpen * 0.2;
-            giftTree.scale.set(s,s,s);
-            if(star) {
-                star.rotation.y -= 0.1;
-                star.scale.setScalar(1 + Math.sin(dt*3)*0.2 + curOpen*0.5);
-            }
+        // 1. 相框动画：手张开时，相框变大并旋转
+        if(photoGroup) {
+            const scale = 1 + curOpen * 0.3; // 最大放大1.3倍
+            photoGroup.scale.set(scale, scale, scale);
+            // 缓慢自转 + 手势加速旋转
+            photoGroup.rotation.y = Math.sin(dt * 0.5) * 0.2 + curOpen * 0.5;
+            photoGroup.rotation.z = Math.cos(dt * 0.3) * 0.1;
         }
 
-        // 粒子优化：每帧只更新一部分，或者简化计算
+        // 2. 粒子动画：手张开时，粒子扩散（爆炸效果）
         if(particles) {
-            const pPos = particles.geometry.attributes.position.array;
-            const pVel = particles.geometry.attributes.velocity.array;
-            
-            // 手机上为了性能，粒子循环更简单
-            for(let i=0; i<pPos.length; i+=3) {
-                const idx = i/3;
-                pPos[i+1] += pVel[idx] * (1 + curOpen * 4); 
-                if(pPos[i+1] > 30) pPos[i+1] = -10;
+            const pos = particles.geometry.attributes.position.array;
+            const vel = particles.geometry.attributes.velocity.array;
+            // 备份一份原始位置用于复位
+            if(!particles.geometry.attributes.initialPos) {
+                 particles.geometry.attributes.initialPos = particles.geometry.attributes.position.clone();
+            }
+            const initPos = particles.geometry.attributes.initialPos.array;
+
+            for(let i=0; i<pos.length; i+=3) {
+                // 基础漂浮
+                const floatSpeed = 0.05 + curOpen * 0.2; // 手张开，漂浮变快
+                
+                // 目标位置 = 原始位置 + (速度向量 * 张开程度 * 爆炸半径)
+                // 这里模拟粒子被“炸”开的效果
+                const explodeFactor = curOpen * 15; // 爆炸半径
+                
+                // 简单的插值动画：当前位置趋向于 (原始位置 + 偏移)
+                const tx = initPos[i] + vel[i] * explodeFactor;
+                const ty = initPos[i+1] + vel[i+1] * explodeFactor;
+                const tz = initPos[i+2] + vel[i+2] * explodeFactor;
+
+                // 加上一点旋转动效
+                pos[i] += (tx - pos[i]) * 0.1;
+                pos[i+1] += (ty - pos[i+1]) * 0.1;
+                pos[i+2] += (tz - pos[i+2]) * 0.1;
+                
+                // 让整体稍微旋转
+                const x = pos[i], z = pos[i+2];
+                const rotSpeed = 0.005 + curOpen * 0.02;
+                pos[i] = x * Math.cos(rotSpeed) - z * Math.sin(rotSpeed);
+                pos[i+2] = x * Math.sin(rotSpeed) + z * Math.cos(rotSpeed);
             }
             particles.geometry.attributes.position.needsUpdate = true;
         }
 
-        const txt = document.getElementById('christmas-text');
-        if(txt) {
-            txt.style.opacity = curOpen > 0.5 ? 1 : 0;
-            txt.style.transform = `translate(-50%, -50%) scale(${0.5 + curOpen * 0.8})`;
+        // 3. 文字动画
+        const title = document.getElementById('title-text');
+        if(title) {
+            title.style.opacity = curOpen > 0.3 ? 1 : 0;
+            title.style.transform = `translate(-50%, -50%) scale(${1 + curOpen * 0.5})`;
         }
 
         renderer.render(scene, camera);
     }
     
-    // 窗口调整
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
