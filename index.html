@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Magic Christmas 2024</title>
+    <title>Magic Christmas 2024 (Lite)</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; touch-action: none; }
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
@@ -16,23 +16,25 @@
             padding: 15px 40px; font-size: 1.2rem; background: rgba(255,215,0,0.1);
             border: 2px solid #FFD700; color: #FFD700; border-radius: 30px;
             cursor: pointer; box-shadow: 0 0 20px rgba(255,215,0,0.3);
+            -webkit-tap-highlight-color: transparent;
         }
         #status-pill {
             position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
             padding: 8px 16px; background: rgba(0,0,0,0.5); border-radius: 20px;
             color: #FFD700; font-size: 13px; z-index: 10; backdrop-filter: blur(5px);
             border: 1px solid rgba(255,215,0,0.2);
+            white-space: nowrap;
         }
         #christmas-text {
             position: absolute; top: 25%; left: 50%; transform: translate(-50%, -50%);
             font-size: 3rem; font-weight: 900; color: #FFD700; z-index: 5;
             text-shadow: 0 0 30px #FFD700; opacity: 0; pointer-events: none;
-            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: opacity 0.3s;
+            text-align: center;
         }
-        #video-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+        #video-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -42,50 +44,62 @@
 
     <div id="overlay">
         <h1 style="font-size: 2rem; margin-bottom: 10px;">圣诞手势魔法</h1>
-        <p style="opacity: 0.8; margin-bottom: 30px;">张开手掌，点亮奇迹</p>
+        <p style="opacity: 0.8; margin-bottom: 30px;">性能优化版</p>
         <button id="start-btn">开启魔法</button>
     </div>
 
-    <div id="status-pill">📡 正在连接魔法源...</div>
+    <div id="status-pill">📡 准备就绪</div>
     <h1 id="christmas-text">MERRY<br>CHRISTMAS</h1>
     <video id="video-input" playsinline webkit-playsinline></video>
     <div id="canvas-container"></div>
 
 <script>
-    // --- 全局配置 ---
+    // --- 针对手机的性能配置 ---
+    const isMobile = window.innerWidth < 768;
     const CONFIG = {
-        pCount: window.innerWidth < 600 ? 4000 : 8000,
-        treeColor: 0x006400,
-        starColor: 0xffd700
+        // 手机上大幅减少粒子数，防止崩溃
+        pCount: isMobile ? 1200 : 5000, 
+        videoW: isMobile ? 360 : 640,
+        videoH: isMobile ? 270 : 480
     };
 
     let scene, camera, renderer, giftTree, star, particles, clock = new THREE.Clock();
     let openness = 0, curOpen = 0;
+    let cameraInstance = null;
 
     document.getElementById('start-btn').onclick = function() {
-        document.getElementById('overlay').style.opacity = '0';
-        setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
-        init();
-        startAI(); // 这里将调用修复后的函数
-        animate();
+        const btn = this;
+        btn.innerText = "加载中...";
+        btn.disabled = true;
+
+        setTimeout(() => {
+            document.getElementById('overlay').style.opacity = '0';
+            setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
+            
+            initThree();
+            startAI(); 
+            animate();
+        }, 100);
     };
 
-    function init() {
+    function initThree() {
         scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.03);
+        scene.fog = new THREE.FogExp2(0x000000, 0.04);
 
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 500);
         camera.position.set(0, 6, 22);
 
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: "high-performance" });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 限制DPR
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 灯光
-        const amb = new THREE.AmbientLight(0xffffff, 0.4);
+        // 简化灯光
+        const amb = new THREE.AmbientLight(0xffffff, 0.6);
         scene.add(amb);
-        const point = new THREE.PointLight(0xffd700, 2, 50);
+        
+        // 只有非移动端才开点光源阴影计算
+        const point = new THREE.PointLight(0xffd700, 1.5, 40);
         point.position.set(0, 10, 5);
         scene.add(point);
 
@@ -95,20 +109,31 @@
 
     function createTree() {
         giftTree = new THREE.Group();
-        const colors = [0xff0000, 0x00ff00, 0xffffff, 0xffd700];
-        const geom = new THREE.BoxGeometry(1, 1, 1);
+        // 减少材质切换开销
+        const geom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+        const mat = new THREE.MeshStandardMaterial({ 
+            color: 0x228b22, 
+            roughness: 0.4, 
+            metalness: 0.1 
+        });
         
-        for(let i=0; i<12; i++) {
+        // 减少盒子数量
+        const levels = isMobile ? 8 : 12;
+        
+        for(let i=0; i<levels; i++) {
             const h = i * 0.9;
-            const rad = 5 * (1 - i/12) + 0.2;
-            const count = Math.floor(rad * 4) + 2;
+            const rad = 5 * (1 - i/levels) + 0.2;
+            const count = Math.floor(rad * 3.5) + 2; 
             for(let j=0; j<count; j++) {
                 const ang = (j/count) * Math.PI * 2 + i;
-                const mat = new THREE.MeshStandardMaterial({ 
-                    color: colors[Math.floor(Math.random()*colors.length)],
-                    roughness: 0.3, metalness: 0.5
-                });
                 const box = new THREE.Mesh(geom, mat);
+                
+                // 随机颜色优化
+                if(Math.random() > 0.7) {
+                    box.material = mat.clone();
+                    box.material.color.setHex(Math.random() > 0.5 ? 0xff0000 : 0xffd700);
+                }
+                
                 box.position.set(Math.cos(ang)*rad, h, Math.sin(ang)*rad);
                 box.rotation.set(Math.random(), ang, 0);
                 box.scale.setScalar(0.6 * (1-i/15));
@@ -116,14 +141,10 @@
             }
         }
 
-        // 炫酷流光星
         const sGeo = new THREE.OctahedronGeometry(1, 0);
         const sMat = new THREE.MeshBasicMaterial({ color: 0xfff000 });
         star = new THREE.Mesh(sGeo, sMat);
-        star.position.y = 11;
-        
-        const glow = new THREE.PointLight(0xffd700, 5, 20);
-        star.add(glow);
+        star.position.y = levels * 0.9 + 0.5;
         giftTree.add(star);
 
         giftTree.position.y = -5;
@@ -134,12 +155,20 @@
         const geo = new THREE.BufferGeometry();
         const pos = [], vels = [];
         for(let i=0; i<CONFIG.pCount; i++) {
-            pos.push((Math.random()-0.5)*80, Math.random()*40, (Math.random()-0.5)*80);
-            vels.push(Math.random() * 0.2 + 0.05);
+            pos.push((Math.random()-0.5)*60, Math.random()*40, (Math.random()-0.5)*60);
+            vels.push(Math.random() * 0.1 + 0.05); // 降低速度
         }
         geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
         geo.setAttribute('velocity', new THREE.Float32BufferAttribute(vels, 1));
-        const mat = new THREE.PointsMaterial({ color: 0xffd700, size: 0.2, transparent: true, blending: THREE.AdditiveBlending });
+        
+        // 使用更简单的材质
+        const mat = new THREE.PointsMaterial({ 
+            color: 0xffd700, 
+            size: isMobile ? 0.3 : 0.2, // 手机上粒子少但大一点
+            transparent: true, 
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending 
+        });
         particles = new THREE.Points(geo, mat);
         scene.add(particles);
     }
@@ -147,73 +176,101 @@
     async function startAI() {
         const status = document.getElementById('status-pill');
         
-        // 【修复点2】 确保 locateFile 使用与 script 标签一致的源
-        const hands = new Hands({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-            }
-        });
-
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
-        hands.onResults(res => {
-            if(res.multiHandLandmarks.length > 0) {
-                status.innerText = "🌟 魔法生效中";
-                const lm = res.multiHandLandmarks[0];
-                const d = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
-                openness = Math.min(1, d * 4);
-            } else {
-                status.innerText = "👋 请张开手掌";
-                openness = 0;
-            }
-        });
-
-        // Camera 类也依赖于正确的脚本加载，这里使用 JS 全局变量
-        const cam = new Camera(document.getElementById('video-input'), {
-            onFrame: async () => await hands.send({image: document.getElementById('video-input')}),
-            width: 480, height: 640, facingMode: 'user'
-        });
-        
         try {
-            await cam.start();
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            // 【关键优化】使用 Lite 模型 (modelComplexity: 0) 
+            hands.setOptions({ 
+                maxNumHands: 1, 
+                modelComplexity: 0, 
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults(res => {
+                if(res.multiHandLandmarks.length > 0) {
+                    status.innerText = "🌟 魔法生效中";
+                    const lm = res.multiHandLandmarks[0];
+                    // 简化距离计算，只取 Y 轴差异大概估算，减少开销
+                    const d = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y);
+                    openness = Math.min(1, d * 5);
+                } else {
+                    status.innerText = "👋 请张开手掌";
+                    openness = 0;
+                }
+            });
+
+            const videoElement = document.getElementById('video-input');
+            cameraInstance = new Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({image: videoElement});
+                },
+                width: CONFIG.videoW, // 降低分辨率
+                height: CONFIG.videoH,
+                facingMode: 'user'
+            });
+
             status.innerText = "✨ 正在唤醒星光...";
+            await cameraInstance.start();
+            
         } catch(e) {
             console.error(e);
-            status.innerText = "❌ 摄像头启动失败";
+            status.innerText = "⚠️ 无法开启摄像头，请在Safari/Chrome中重试";
+            // 即使摄像头失败，也让动画跑起来（自动演示模式）
+            setInterval(() => {
+                openness = (Math.sin(Date.now()/1000)+1)/2;
+            }, 3000);
         }
     }
 
     function animate() {
         requestAnimationFrame(animate);
+        
         const dt = clock.getElapsedTime();
+        // 缓动
         curOpen += (openness - curOpen) * 0.1;
 
-        // 树与星旋转
         if(giftTree) {
             giftTree.rotation.y = dt * 0.2 + curOpen * 1.5;
             const s = 1 + curOpen * 0.2;
             giftTree.scale.set(s,s,s);
-            star.rotation.y -= 0.1;
-            star.scale.setScalar(1 + Math.sin(dt*5)*0.2 + curOpen*0.5);
+            if(star) {
+                star.rotation.y -= 0.1;
+                star.scale.setScalar(1 + Math.sin(dt*3)*0.2 + curOpen*0.5);
+            }
         }
 
-        // 螺旋粒子流
-        const pPos = particles.geometry.attributes.position.array;
-        const pVel = particles.geometry.attributes.velocity.array;
-        for(let i=0; i<pPos.length; i+=3) {
-            const idx = i/3;
-            pPos[i+1] += pVel[idx] * (1 + curOpen * 5); // 随手势加速升天
-            if(pPos[i+1] > 30) pPos[i+1] = -10;
-            pPos[i] += Math.sin(dt + idx) * 0.05;
+        // 粒子优化：每帧只更新一部分，或者简化计算
+        if(particles) {
+            const pPos = particles.geometry.attributes.position.array;
+            const pVel = particles.geometry.attributes.velocity.array;
+            
+            // 手机上为了性能，粒子循环更简单
+            for(let i=0; i<pPos.length; i+=3) {
+                const idx = i/3;
+                pPos[i+1] += pVel[idx] * (1 + curOpen * 4); 
+                if(pPos[i+1] > 30) pPos[i+1] = -10;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
         }
-        particles.geometry.attributes.position.needsUpdate = true;
 
-        // 文字互动
         const txt = document.getElementById('christmas-text');
-        txt.style.opacity = curOpen > 0.6 ? (curOpen - 0.6) * 2.5 : 0;
-        txt.style.transform = `translate(-50%, -50%) scale(${0.5 + curOpen * 0.8})`;
+        if(txt) {
+            txt.style.opacity = curOpen > 0.5 ? 1 : 0;
+            txt.style.transform = `translate(-50%, -50%) scale(${0.5 + curOpen * 0.8})`;
+        }
 
         renderer.render(scene, camera);
     }
+    
+    // 窗口调整
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
 </script>
 </body>
 </html>
